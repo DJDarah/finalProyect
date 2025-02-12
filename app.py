@@ -35,6 +35,11 @@ if option == "Chatbot":
     if "selected_places" not in st.session_state:
         st.session_state.selected_places = []
 
+    # Función para agregar lugares sin perder el estado
+    def add_place(place):
+        if place not in st.session_state.selected_places:
+            st.session_state.selected_places.append(place)
+
     if st.button("Submit"):
         if user_query:
             category = user_query.lower()
@@ -43,17 +48,14 @@ if option == "Chatbot":
 
                 st.write(f"Here are some recommended places for {category}:")
                 
+                # Mostrar botones correctamente con callbacks
                 for place in suggestions:
-                    if st.button(f"Add {place} to visit list", key=place):
-                        if place not in st.session_state.selected_places:
-                            st.session_state.selected_places.append(place)
+                    st.button(f"Add {place} to visit list", key=f"add_{place}", on_click=add_place, args=(place,))
 
-            else:
-                st.write("Sorry, I don't have recommendations for that category.")
-
-    # Mostrar la lista de lugares seleccionados siempre fuera del `if`
+    # Mostrar la lista de lugares seleccionados SIEMPRE
     st.write("### Your selected places to visit:")
     st.write(st.session_state.selected_places)
+
 
 
 elif option == "Find Weather":

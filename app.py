@@ -30,15 +30,28 @@ option = st.sidebar.selectbox("Select a feature:", ["Chatbot", "Find Weather", "
 if option == "Chatbot":
     st.write("### Ask the Travel Assistant about Puerto Rico!")
     user_query = st.text_input("Enter your question:")
+
+    # Inicializar la variable de sesión para almacenar lugares seleccionados
+    if "selected_places" not in st.session_state:
+        st.session_state.selected_places = []
+
     if st.button("Submit"):
         if user_query:
             category = user_query.lower()
             if category in landmarks:
                 suggestions = random.sample(landmarks[category], min(2, len(landmarks[category])))
-                response = f"Here are some recommended places for {category}: {', '.join(suggestions)}"
+
+                st.write(f"Here are some recommended places for {category}:")
+                for place in suggestions:
+                    if st.button(f"Add {place} to visit list"):
+                        if place not in st.session_state.selected_places:
+                            st.session_state.selected_places.append(place)
+
+                st.write("### Your selected places to visit:")
+                st.write(st.session_state.selected_places)
+
             else:
-                response = "Sorry, I don't have recommendations for that category."
-            st.write("**Response:**", response)
+                st.write("Sorry, I don't have recommendations for that category.")
 
 elif option == "Find Weather":
     st.write("### Get Weather Forecast")

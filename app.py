@@ -31,7 +31,7 @@ if option == "Chatbot":
     st.write("### Ask the Travel Assistant about Puerto Rico!")
     user_query = st.text_input("Enter your question:")
 
-    # Inicializar la variable de sesión para almacenar lugares seleccionados
+    # Inicializar la variable de sesión para almacenar lugares seleccionados solo si no existe
     if "selected_places" not in st.session_state:
         st.session_state.selected_places = []
 
@@ -48,11 +48,13 @@ if option == "Chatbot":
                         if place not in st.session_state.selected_places:
                             st.session_state.selected_places.append(place)
 
-                st.write("### Your selected places to visit:")
-                st.write(st.session_state.selected_places)
-            
             else:
                 st.write("Sorry, I don't have recommendations for that category.")
+
+    # Mostrar la lista de lugares seleccionados siempre fuera del `if`
+    st.write("### Your selected places to visit:")
+    st.write(st.session_state.selected_places)
+
 
 elif option == "Find Weather":
     st.write("### Get Weather Forecast")

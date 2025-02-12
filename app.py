@@ -42,6 +42,7 @@ if option == "Chatbot":
                 suggestions = random.sample(landmarks[category], min(2, len(landmarks[category])))
 
                 st.write(f"Here are some recommended places for {category}:")
+                
                 for place in suggestions:
                     if st.button(f"Add {place} to visit list", key=place):
                         if place not in st.session_state.selected_places:
@@ -49,7 +50,7 @@ if option == "Chatbot":
 
                 st.write("### Your selected places to visit:")
                 st.write(st.session_state.selected_places)
-
+            
             else:
                 st.write("Sorry, I don't have recommendations for that category.")
 

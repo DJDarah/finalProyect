@@ -54,8 +54,7 @@ if option == "Chatbot":
 
     # Mostrar la lista de lugares seleccionados SIEMPRE
     st.write("### Your selected places to visit:")
-    st.write(st.session_state.selected_places)
-
+    st.write(" - " + "\n - ".join(st.session_state.selected_places))
 
 
 elif option == "Find Weather":

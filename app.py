@@ -45,7 +45,7 @@ elif option == "Find Weather":
     location = st.text_input("Enter a location:")
     date = st.date_input("Select a date:")
     if st.button("Get Forecast"):
-        API_KEY = "YOUR_WEATHER_API_KEY"  # Replace with actual API Key
+        API_KEY = "62bb61858baf4e2db7d224858251002"  # Replace with actual API Key
         BASE_URL = "http://api.weatherapi.com/v1/forecast.json"
         params = {"key": API_KEY, "q": location, "dt": date, "days": 1}
         try:

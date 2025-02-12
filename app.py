@@ -43,7 +43,7 @@ if option == "Chatbot":
 
                 st.write(f"Here are some recommended places for {category}:")
                 for place in suggestions:
-                    if st.button(f"Add {place} to visit list"):
+                    if st.button(f"Add {place} to visit list", key=place):
                         if place not in st.session_state.selected_places:
                             st.session_state.selected_places.append(place)
 

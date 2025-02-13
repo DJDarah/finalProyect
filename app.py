@@ -1,29 +1,67 @@
 import streamlit as st
+import os
 import json
 import random
 import requests
 from bs4 import BeautifulSoup
-from geopy.distance import geodesic
-from langchain.vectorstores import FAISS
-from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.document_loaders import TextLoader
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from geopy.geocoders import Nominatim
+from nltk.tokenize import sent_tokenize
+import nltk
 
-# Load the embedding model
-embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+# Descargar nltk tokenizer si es necesario
+nltk.download('punkt')
 
-# Sample data for Puerto Rico landmarks
-landmarks = {
-    "beach": ["Flamenco Beach", "Playa Buyé", "Crash Boat Beach"],
-    "history": ["El Morro", "San Cristóbal Fort", "Casa Blanca Museum"],
-    "nature": ["El Yunque National Forest", "Cueva Ventana", "Toro Verde Adventure Park"],
-    "culture": ["Paseo de la Princesa", "La Placita de Santurce", "Ponce Museum of Art"]
-}
-
+# Configuración de la aplicación
 st.set_page_config(page_title="Puerto Rico Travel Assistant", layout="wide")
 
 st.title("🌍 Puerto Rico Travel Assistant")
 
+# Carpetas donde están los TXT de municipios y landmarks
+municipalities_folder = r"C:\Users\harid\Downloads\municipalities\municipalities"
+landmarks_folder = r"C:\Users\harid\Downloads\landmarks\landmarks"
+
+# Función para limpiar texto y extraer contenido legible
+def clean_text(raw_text):
+    soup = BeautifulSoup(raw_text, "html.parser")
+    text = soup.get_text(separator=" ").strip()
+    return " ".join(text.split()[:50])  # Mantiene solo las primeras 50 palabras como resumen
+
+# Función para extraer coordenadas usando Geopy
+def get_coordinates(location_name):
+    geolocator = Nominatim(user_agent="geoapiExercises")
+    location = geolocator.geocode(location_name + ", Puerto Rico")
+    if location:
+        return location.latitude, location.longitude
+    return None, None
+
+# Función para procesar archivos TXT en una carpeta
+def process_files(folder_path):
+    extracted_data = []
+    if os.path.exists(folder_path):
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            if os.path.isfile(file_path) and filename.endswith(".txt"):
+                with open(file_path, "r", encoding="utf-8") as file:
+                    raw_content = file.read()
+                    cleaned_content = clean_text(raw_content)
+
+                # Extraer coordenadas basadas en el nombre del archivo
+                location_name = os.path.splitext(filename)[0]  # Quitar extensión .txt
+                latitude, longitude = get_coordinates(location_name)
+
+                extracted_data.append({
+                    "name": location_name,
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "summary": cleaned_content
+                })
+    return extracted_data
+
+# Procesar municipios y landmarks
+municipalities = process_files(municipalities_folder)
+landmarks = process_files(landmarks_folder)
+
+# Interfaz de usuario en Streamlit
 st.sidebar.header("Choose an Option")
 option = st.sidebar.selectbox("Select a feature:", ["Chatbot", "Find Weather", "Explore Places"])
 
@@ -31,11 +69,9 @@ if option == "Chatbot":
     st.write("### Ask the Travel Assistant about Puerto Rico!")
     user_query = st.text_input("Enter your question:")
 
-    # Inicializar la variable de sesión para almacenar lugares seleccionados solo si no existe
     if "selected_places" not in st.session_state:
         st.session_state.selected_places = []
 
-    # Función para agregar lugares sin perder el estado
     def add_place(place):
         if place not in st.session_state.selected_places:
             st.session_state.selected_places.append(place)
@@ -43,19 +79,20 @@ if option == "Chatbot":
     if st.button("Submit"):
         if user_query:
             category = user_query.lower()
-            if category in landmarks:
-                suggestions = random.sample(landmarks[category], min(2, len(landmarks[category])))
+            suggestions = []
+            
+            for place in landmarks + municipalities:
+                if category in place["summary"].lower():
+                    suggestions.append(place)
 
-                st.write(f"Here are some recommended places for {category}:")
-                
-                # Mostrar botones correctamente con callbacks
-                for place in suggestions:
-                    st.button(f"Add {place} to visit list", key=f"add_{place}", on_click=add_place, args=(place,))
+            if suggestions:
+                st.write("Here are some recommended places:")
+                for place in suggestions[:5]:  # Muestra hasta 5 lugares
+                    st.write(f"- {place['name']} ({place['latitude']}, {place['longitude']})")
+                    st.button(f"Add {place['name']} to visit list", key=f"add_{place['name']}", on_click=add_place, args=(place["name"],))
 
-    # Mostrar la lista de lugares seleccionados SIEMPRE
     st.write("### Your selected places to visit:")
     st.write(" - " + "\n - ".join(st.session_state.selected_places))
-
 
 elif option == "Find Weather":
     st.write("### Get Weather Forecast")
@@ -88,12 +125,14 @@ elif option == "Find Weather":
 
 elif option == "Explore Places":
     st.write("### Explore Popular Locations")
-    user_interest = st.selectbox("Choose your interest:", list(landmarks.keys()))
+    user_interest = st.selectbox("Choose your interest:", ["All"] + [p["name"] for p in landmarks + municipalities])
     if st.button("Find Locations"):
-        results = landmarks.get(user_interest, [])
+        results = [p for p in landmarks + municipalities if user_interest in p["name"] or user_interest == "All"]
         if results:
-            st.write(f"Here are some great places for {user_interest}:")
+            st.write("Here are some great places:")
             for place in results:
-                st.write(f"- {place}")
+                st.write(f"- {place['name']} ({place['latitude']}, {place['longitude']})")
+                st.write(f"  {place['summary']}")
         else:
             st.write("No places found for this category.")
+

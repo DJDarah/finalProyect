@@ -1,11 +1,4 @@
 ﻿streamlit
-openai
-faiss-cpu
-beautifulsoup4
 requests
+beautifulsoup4
 geopy
-sentence-transformers
-langchain==0.3.18
-langchain-community==0.3.17
-langchain-core==0.3.34
-langchain-text-splitters==0.3.6

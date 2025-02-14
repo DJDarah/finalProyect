@@ -1,100 +1,79 @@
 import streamlit as st
-import os
-import json
 import requests
-import re
 from bs4 import BeautifulSoup
-from geopy.geocoders import Nominatim
+import json
+from datetime import datetime
+from geopy.distance import geodesic
 
-# Inicializa el geolocalizador con user-agent para evitar errores 403
-geolocator = Nominatim(user_agent="geoapiExercises", timeout=10)
+# Load Data
+@st.cache_data
+def load_json(file_path):
+    with open(file_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
+landmarks_path = "landmarks_embeddings.json"
+municipalities_path = "municipalities_embeddings.json"
+landmarks_data = load_json(landmarks_path)
+municipalities_data = load_json(municipalities_path)
 
-# 🔹 Función para limpiar HTML y texto innecesario
-def clean_text(text):
-    soup = BeautifulSoup(text, "html.parser")
-    cleaned_text = soup.get_text()
-    cleaned_text = re.sub(r"\n+", " ", cleaned_text)  # Remueve saltos de línea repetidos
-    cleaned_text = re.sub(r"\s+", " ", cleaned_text).strip()  # Remueve espacios extra
-    return cleaned_text
+# Wikipedia Data Extraction
+def get_location_data(location_name):
+    url = f"https://en.wikipedia.org/wiki/{location_name.replace(' ', '_')}"
+    response = requests.get(url)
+    
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.text, 'html.parser')
+        paragraphs = soup.find_all('p')
+        summary = "Summary not available."
+        for p in paragraphs:
+            if "may refer to" not in p.text and len(p.text.strip()) > 30:
+                summary = p.text.strip()
+                break
+        coords = soup.find(class_='geo-dec')
+        coordinates = coords.text.strip() if coords else "Coordinates unavailable"
+        return {"location": location_name, "coordinates": coordinates, "summary": summary}
+    return {"error": "Location not found"}
 
+# Weather API
+def find_weather_forecast(date, location):
+    API_KEY = "62bb61858baf4e2db7d224858251002"
+    url = f"http://api.weatherapi.com/v1/forecast.json?key={API_KEY}&q={location}&days=3"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        forecast = data.get('forecast', {}).get('forecastday', [])[0]
+        if forecast:
+            return forecast.get('day', {}).get('condition', {}).get('text', 'Unknown')
+    return "Weather data not available"
 
-# 🔹 Función para extraer un resumen sin `nltk`
-def extract_summary(text, max_words=25):
-    words = text.split()
-    return " ".join(words[:max_words]) + "..." if len(words) > max_words else text
+# Streamlit UI
+st.title("🌍 Puerto Rico Travel Planner")
 
+# Date Input
+travel_date = st.date_input("Select your travel date")
 
-# 🔹 Función para obtener coordenadas de un lugar (Evita errores 403)
-def get_coordinates(location_name):
-    try:
-        location = geolocator.geocode(f"{location_name}, Puerto Rico")
-        if location:
-            return location.latitude, location.longitude
-        else:
-            return None, None
-    except Exception:
-        return None, None
+# Interest Selection
+categories = ["Beaches", "Nature", "Historical Sites", "Food & Culture", "Festivals & Events"]
+selected_interests = st.multiselect("Select your interests", categories)
 
+# Location Suggestions
+if st.button("Suggest Locations"):
+    suggested_locations = list(landmarks_data.keys())[:10]
+    st.write("### Suggested Locations:")
+    for loc in suggested_locations:
+        st.write(f"- {loc}")
 
-# 🔹 Función para procesar los archivos de municipios y landmarks
-def process_files(folder_path):
-    extracted_data = []
-    if not os.path.exists(folder_path):
-        return extracted_data
+# Ask About Locations
+location_query = st.text_input("Ask about a specific location")
+if st.button("Get Information") and location_query:
+    info = get_location_data(location_query)
+    st.json(info)
 
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".txt"):
-            file_path = os.path.join(folder_path, filename)
-            with open(file_path, "r", encoding="utf-8") as file:
-                raw_content = file.read()
-                cleaned_content = clean_text(raw_content)
-
-            location_name = os.path.splitext(filename)[0]  # Extrae el nombre sin extensión
-            latitude, longitude = get_coordinates(location_name)
-            summary = extract_summary(cleaned_content)
-
-            extracted_data.append({
-                "name": location_name,
-                "latitude": latitude,
-                "longitude": longitude,
-                "summary": summary
-            })
-
-    return extracted_data
-
-
-# 🔹 Cargar los archivos desde la carpeta
-municipalities_folder = "municipalities"
-landmarks_folder = "landmarks"
-
-municipalities = process_files(municipalities_folder)
-landmarks = process_files(landmarks_folder)
-
-# 🔹 Estructura del JSON final
-data = {
-    "municipalities": municipalities,
-    "landmarks": landmarks
-}
-
-# 🔹 Guardar los resultados en un JSON
-output_file = "processed_data.json"
-with open(output_file, "w", encoding="utf-8") as json_file:
-    json.dump(data, json_file, indent=4)
-
-# 🔹 INTERFAZ EN STREAMLIT
-st.title("Puerto Rico Travel Data")
-
-# Mostrar Municipios
-st.header("Municipalities")
-for item in municipalities:
-    st.write(f"**{item['name']}** - {item['summary']}")
-    st.write(f"📍 Lat: {item['latitude']}, Lon: {item['longitude']}")
-
-# Mostrar Landmarks
-st.header("Landmarks")
-for item in landmarks:
-    st.write(f"**{item['name']}** - {item['summary']}")
-    st.write(f"📍 Lat: {item['latitude']}, Lon: {item['longitude']}")
-
-st.success(f"Data processed and saved to {output_file} ✅")
+# Visit List
+visit_list = []
+if st.button("Lock Locations"):
+    for loc in suggested_locations:
+        if st.checkbox(f"Lock {loc}"):
+            visit_list.append(loc)
+    st.write("### Your Locked Visit List:")
+    st.write(visit_list)

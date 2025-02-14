@@ -3,9 +3,12 @@ import os
 import openai
 import requests
 import json
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+import re
+from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
+from langchain_community.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQA
+from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -23,44 +26,52 @@ BASE_DATA_DIR = "data"
 LANDMARK_DIR = os.path.join(BASE_DATA_DIR, "landmarks")
 MUNICIPALITIES_DIR = os.path.join(BASE_DATA_DIR, "municipalities")
 
+# Función para dividir texto en fragmentos pequeños
+def chunk_text(text, chunk_size=500):
+    words = text.split()
+    return [" ".join(words[i:i+chunk_size]) for i in range(0, len(words), chunk_size)]
+
 # Cargar y limpiar textos de múltiples directorios
 def load_cleaned_texts(directories, max_files=30):
     texts = []
     for directory in directories:
         if not os.path.exists(directory):
             continue
-        files = sorted(os.listdir(directory))[:max_files]
+        files = sorted(os.listdir(directory))[:max_files]  # Solo los primeros 30 archivos por directorio
         for filename in files:
             with open(os.path.join(directory, filename), "r", encoding="utf-8") as file:
                 raw_html = file.read()
                 soup = BeautifulSoup(raw_html, "html.parser")
+                for script in soup(["script", "style", "header", "footer", "nav", "aside"]):
+                    script.extract()
                 text = soup.get_text(separator=" ").strip()
                 cleaned_text = " ".join(text.split())
-                texts.append(cleaned_text)
+                texts.extend(chunk_text(cleaned_text))  # Dividir texto en fragmentos pequeños
     return texts
 
-# Cargar datos
-landmarks = load_cleaned_texts([LANDMARK_DIR, MUNICIPALITIES_DIR])
+# Cargar datos de ambas carpetas
+landmarks = load_cleaned_texts([LANDMARK_DIR, MUNICIPALITIES_DIR], max_files=30)
 
 # Cargar datos solo si el índice no existe
 VECTOR_DB_PATH = "vector_store/faiss_index"
 
+# Evitar re-procesamiento si ya existe un índice
 def get_vector_store():
     if os.path.exists(VECTOR_DB_PATH):
-        return FAISS.load_local(VECTOR_DB_PATH, OpenAIEmbeddings(model=EMBEDDING_MODEL))
+        return FAISS.load_local(VECTOR_DB_PATH, OpenAIEmbeddings(model=EMBEDDING_MODEL), allow_dangerous_deserialization=True)
     else:
         if not landmarks:
             st.error("No landmark or municipality data found. Please check your data directory.")
             st.stop()
         embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
         vector_store = FAISS.from_texts(landmarks, embeddings)
-        vector_store.save_local(VECTOR_DB_PATH)
+        vector_store.save_local(VECTOR_DB_PATH)  # Guardar índice localmente
         return vector_store
 
 vector_store = get_vector_store()
 retriever = vector_store.as_retriever()
 
-# Definir prompt para el chatbot
+# Definir prompt para el chatbot con 'context'
 prompt_template = PromptTemplate(
     template="""
     You are a travel assistant specialized in Puerto Rico tourism.
@@ -75,8 +86,11 @@ prompt_template = PromptTemplate(
     input_variables=["days", "query", "context"]
 )
 
-# Crear la cadena de consulta con RetrievalQA
-qa_chain = RetrievalQA(retriever=retriever)
+# Cargar la cadena de combinación de documentos
+combine_documents_chain = load_qa_chain(llm=ChatOpenAI(model=LLM_MODEL), chain_type="stuff")
+
+# Crear la cadena de consulta con RetrievalQA correctamente
+qa_chain = RetrievalQA(retriever=retriever, combine_documents_chain=combine_documents_chain)
 
 # Obtener datos del clima
 def get_weather(location):
@@ -95,23 +109,13 @@ def get_weather(location):
             }
     return {"error": "Could not fetch weather data."}
 
-# Obtener coordenadas desde JSON
-def get_coordinates(location):
-    for directory in [LANDMARK_DIR, MUNICIPALITIES_DIR]:
-        if not os.path.exists(directory):
-            continue
-        files = os.listdir(directory)
-        for filename in files:
-            with open(os.path.join(directory, filename), "r", encoding="utf-8") as file:
-                data = json.load(file)
-                for item in data:
-                    name = item.get("row", {}).get("Name", "").lower()
-                    if name == location.lower():
-                        return {
-                            "latitude": item.get("row", {}).get("Latitude", "N/A"),
-                            "longitude": item.get("row", {}).get("Longitude", "N/A")
-                        }
-    return {"latitude": "N/A", "longitude": "N/A"}
+# Extraer todas las ubicaciones del itinerario
+def extract_valid_locations(itinerary_text):
+    puerto_rico_places = [
+        "Adjuntas", "Aguada", "Aguadilla", "Aguas Buenas", "Aibonito", "Añasco", "Arecibo", "Arroyo", "Barceloneta", "Barranquitas", "Bayamón", "Cabo Rojo", "Caguas", "Camuy", "Canóvanas", "Carolina", "Cataño", "Cayey", "Ceiba", "Ciales", "Cidra", "Coamo", "Comerío", "Corozal", "Culebra", "Dorado", "Fajardo", "Florida", "Guánica", "Guayama", "Guayanilla", "Guaynabo", "Gurabo", "Hatillo", "Hormigueros", "Humacao", "Isabela", "Jayuya", "Juana Díaz", "Juncos", "Lajas", "Lares", "Las Marías", "Las Piedras", "Loíza", "Luquillo", "Manatí", "Maricao", "Maunabo", "Mayagüez", "Moca", "Morovis", "Naguabo", "Naranjito", "Orocovis", "Patillas", "Peñuelas", "Ponce", "Quebradillas", "Rincón", "Río Grande", "Sabana Grande", "Salinas", "San Germán", "San Juan", "San Lorenzo", "San Sebastián", "Santa Isabel", "Toa Alta", "Toa Baja", "Trujillo Alto", "Utuado", "Vega Alta", "Vega Baja", "Vieques", "Villalba", "Yabucoa", "Yauco"
+    ]
+    found_locations = [place for place in puerto_rico_places if place.lower() in itinerary_text.lower()]
+    return found_locations if found_locations else ["San Juan"]
 
 # Interfaz con Streamlit
 st.title("Puerto Rico Travel Planner")
@@ -127,15 +131,9 @@ if st.button("Get Itinerary"):
     if "result" in itinerary:
         st.write("### Suggested Itinerary:")
         st.write(itinerary["result"])
-        
         st.write("### Weather Forecast:")
-        locations = itinerary["result"].split("\n")
-        weather_reports = {loc: get_weather(loc) for loc in locations if loc.strip()}
+        locations = extract_valid_locations(itinerary["result"])
+        weather_reports = {loc: get_weather(loc) for loc in locations}
         st.json(weather_reports)
-        
-        st.write("### Coordinates:")
-        coordinates_reports = {loc: get_coordinates(loc) for loc in locations if loc.strip()}
-        st.json(coordinates_reports)
-
     else:
         st.error("No itinerary could be generated. Please try again with different inputs.")

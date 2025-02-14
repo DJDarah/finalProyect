@@ -27,20 +27,25 @@ municipalities_data = load_json(municipalities_path)
 def categorize_locations(data):
     categories = {"Beaches": [], "Nature": [], "Historical Sites": [], "Food & Culture": [], "Festivals & Events": []}
     for item in data.values():
-        category = item.get('row', {}).get('Category', 'Other')
+        category = item.get('row', {}).get('Category', 'Other').lower()
         name = item.get('row', {}).get('Name', 'Unknown')
         municipality = item.get('row', {}).get('Municipality', 'Unknown')
+        latitude = item.get('row', {}).get('Latitude', 'N/A')
+        longitude = item.get('row', {}).get('Longitude', 'N/A')
+        description = item.get('row', {}).get('Description', 'N/A')
         
-        if "beach" in category.lower():
-            categories["Beaches"].append({"name": name, "municipality": municipality})
-        elif "nature" in category.lower():
-            categories["Nature"].append({"name": name, "municipality": municipality})
-        elif "historical" in category.lower():
-            categories["Historical Sites"].append({"name": name, "municipality": municipality})
-        elif "food" in category.lower():
-            categories["Food & Culture"].append({"name": name, "municipality": municipality})
-        elif "festival" in category.lower():
-            categories["Festivals & Events"].append({"name": name, "municipality": municipality})
+        location_data = {"name": name, "municipality": municipality, "latitude": latitude, "longitude": longitude, "description": description}
+        
+        if "beach" in category:
+            categories["Beaches"].append(location_data)
+        elif "nature" in category:
+            categories["Nature"].append(location_data)
+        elif "historical" in category:
+            categories["Historical Sites"].append(location_data)
+        elif "food" in category:
+            categories["Food & Culture"].append(location_data)
+        elif "festival" in category:
+            categories["Festivals & Events"].append(location_data)
     return categories
 
 location_categories = categorize_locations(landmarks_data)
@@ -108,8 +113,8 @@ date_selected = st.date_input("Select your travel date", datetime.today())
 selected_interests = st.multiselect("Select your interests", list(location_categories.keys()))
 
 # Sugerencia de ubicaciones
+suggested_locations = []
 if st.button("Suggest Locations"):
-    suggested_locations = []
     for interest in selected_interests:
         suggested_locations.extend(location_categories.get(interest, []))
     st.write("### Suggested Locations:")

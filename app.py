@@ -3,16 +3,13 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import openai
-import os
-from dotenv import load_dotenv, find_dotenv
 from datetime import datetime
 
-# 📌 Load API keys from environment variables
-load_dotenv(find_dotenv())  # Load from .env if available
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+# 📌 Obtener API Keys desde Streamlit Secrets
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
 
-# Initialize OpenAI client
+# Inicializar cliente OpenAI
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 # Load Data
@@ -26,7 +23,7 @@ municipalities_path = "municipalities_embeddings.json"
 landmarks_data = load_json(landmarks_path)
 municipalities_data = load_json(municipalities_path)
 
-# Categorize Locations by Type
+# Categorizar ubicaciones
 def categorize_locations(data):
     categories = {"Beaches": [], "Nature": [], "Historical Sites": [], "Food & Culture": [], "Festivals & Events": []}
     for item in data.values():
@@ -47,35 +44,7 @@ def categorize_locations(data):
 
 location_categories = categorize_locations(landmarks_data)
 
-# Wikipedia Data Extraction
-def get_location_data(location_name):
-    url = f"https://en.wikipedia.org/wiki/{location_name.replace(' ', '_')}"
-    response = requests.get(url)
-    
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.text, 'html.parser')
-        summary = "Summary not available."
-        paragraphs = soup.find_all('p')
-        for p in paragraphs:
-            if "may refer to" not in p.text and len(p.text.strip()) > 30:
-                summary = p.text.strip()
-                break
-
-        coordinates = "Coordinates unavailable"
-        infobox = soup.find(class_="infobox")
-        if infobox:
-            for row in infobox.find_all("tr"):
-                if "Coordinates" in row.text:
-                    coord_tag = row.find("span", class_="geo-dec")
-                    if coord_tag:
-                        coordinates = coord_tag.text.strip()
-                    break
-        
-        return {"location": location_name, "coordinates": coordinates, "summary": summary}
-    
-    return {"error": "Location not found"}
-
-# Weather API
+# Obtener información del clima
 def find_weather_forecast(date, location):
     url = f"http://api.weatherapi.com/v1/forecast.json?key={WEATHER_API_KEY}&q={location}&days=3"
     response = requests.get(url)
@@ -86,7 +55,7 @@ def find_weather_forecast(date, location):
             return forecast.get('day', {}).get('condition', {}).get('text', 'Unknown')
     return "Weather data not available"
 
-# Generate Responses using OpenAI
+# Generar respuestas con OpenAI
 def generate_response(prompt):
     response = client.chat.completions.create(
         model="gpt-4",
@@ -95,7 +64,7 @@ def generate_response(prompt):
     )
     return response.choices[0].message.content
 
-# Generate Itinerary using OpenAI
+# Generar itinerario con OpenAI
 def generate_itinerary(visit_list, travel_date):
     prompt = f"Generate a travel itinerary for the following locations in Puerto Rico on {travel_date}: {', '.join(visit_list)}. Include recommendations for food, activities, and travel tips."
     return generate_response(prompt)
@@ -103,13 +72,13 @@ def generate_itinerary(visit_list, travel_date):
 # Streamlit UI
 st.title("🌍 Puerto Rico Travel Planner")
 
-# Date Input
-travel_date = st.date_input("Select your travel date", datetime.today())
+# Selección de fecha
+date_selected = st.date_input("Select your travel date", datetime.today())
 
-# Interest Selection
+# Selección de intereses
 selected_interests = st.multiselect("Select your interests", list(location_categories.keys()))
 
-# Location Suggestions
+# Sugerencia de ubicaciones
 if st.button("Suggest Locations"):
     suggested_locations = []
     for interest in selected_interests:
@@ -118,14 +87,17 @@ if st.button("Suggest Locations"):
     for loc in suggested_locations:
         st.write(f"- {loc}")
 
-# Ask About Locations
+# Consultar información de una ubicación
 location_query = st.text_input("Ask about a specific location")
 if st.button("Get Information") and location_query:
-    info = get_location_data(location_query)
+    info = generate_response(f"Provide detailed travel information about {location_query} in Puerto Rico.")
+    weather = find_weather_forecast(date_selected, location_query)
     st.write("### Location Information:")
-    st.json(info)
+    st.write(info)
+    st.write("### Weather Forecast:")
+    st.write(weather)
 
-# Visit List
+# Lista de ubicaciones a visitar
 visit_list = []
 if st.button("Lock Locations"):
     for loc in suggested_locations:
@@ -134,8 +106,8 @@ if st.button("Lock Locations"):
     st.write("### Your Locked Visit List:")
     st.write(visit_list)
 
-# Generate Itinerary
+# Generar itinerario
 if st.button("Generate Itinerary") and visit_list:
-    itinerary = generate_itinerary(visit_list, travel_date)
+    itinerary = generate_itinerary(visit_list, date_selected)
     st.write("### Your Travel Itinerary:")
     st.write(itinerary)

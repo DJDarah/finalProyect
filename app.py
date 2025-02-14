@@ -2,8 +2,6 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import json
-from datetime import datetime
-from geopy.distance import geodesic
 
 # Load Data
 @st.cache_data
@@ -39,12 +37,7 @@ def find_weather_forecast(date, location):
     API_KEY = "62bb61858baf4e2db7d224858251002"
     url = f"http://api.weatherapi.com/v1/forecast.json?key={API_KEY}&q={location}&days=3"
     response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        forecast = data.get('forecast', {}).get('forecastday', [])[0]
-        if forecast:
-            return forecast.get('day', {}).get('condition', {}).get('text', 'Unknown')
-    return "Weather data not available"
+    return response.json() if response.status_code == 200 else {"error": "Weather data not available"}
 
 # Streamlit UI
 st.title("🌍 Puerto Rico Travel Planner")

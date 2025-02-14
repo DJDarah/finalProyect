@@ -2,6 +2,16 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import json
+import openai
+import os
+from dotenv import load_dotenv, find_dotenv
+from datetime import datetime
+
+# 📌 Cargar claves API desde GitHub Secrets o entorno local
+load_dotenv(find_dotenv())  # Carga las claves desde .env si existe
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
 # Load Data
 @st.cache_data
@@ -34,16 +44,30 @@ def get_location_data(location_name):
 
 # Weather API
 def find_weather_forecast(date, location):
-    API_KEY = "62bb61858baf4e2db7d224858251002"
-    url = f"http://api.weatherapi.com/v1/forecast.json?key={API_KEY}&q={location}&days=3"
+    url = f"http://api.weatherapi.com/v1/forecast.json?key={WEATHER_API_KEY}&q={location}&days=3"
     response = requests.get(url)
-    return response.json() if response.status_code == 200 else {"error": "Weather data not available"}
+    if response.status_code == 200:
+        data = response.json()
+        forecast = data.get('forecast', {}).get('forecastday', [])[0]
+        if forecast:
+            return forecast.get('day', {}).get('condition', {}).get('text', 'Unknown')
+    return "Weather data not available"
+
+# Generate Itinerary using OpenAI
+def generate_itinerary(visit_list, travel_date):
+    prompt = f"Generate a travel itinerary for the following locations in Puerto Rico on {travel_date}: {', '.join(visit_list)}. Include recommendations for food, activities, and travel tips."
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "system", "content": "You are a travel planner for Puerto Rico."},
+                  {"role": "user", "content": prompt}]
+    )
+    return response["choices"][0]["message"]["content"]
 
 # Streamlit UI
 st.title("🌍 Puerto Rico Travel Planner")
 
 # Date Input
-travel_date = st.date_input("Select your travel date")
+travel_date = st.date_input("Select your travel date", datetime.today())
 
 # Interest Selection
 categories = ["Beaches", "Nature", "Historical Sites", "Food & Culture", "Festivals & Events"]
@@ -71,3 +95,8 @@ if st.button("Lock Locations"):
     st.write("### Your Locked Visit List:")
     st.write(visit_list)
 
+# Generate Itinerary
+if st.button("Generate Itinerary") and visit_list:
+    itinerary = generate_itinerary(visit_list, travel_date)
+    st.write("### Your Travel Itinerary:")
+    st.write(itinerary)

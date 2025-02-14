@@ -11,7 +11,9 @@ from datetime import datetime
 load_dotenv(find_dotenv())  # Carga las claves desde .env si existe
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
-openai.api_key = OPENAI_API_KEY
+
+# Inicializar cliente OpenAI
+client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 # Load Data
 @st.cache_data
@@ -68,12 +70,12 @@ def find_weather_forecast(date, location):
 
 # Generate Responses using OpenAI
 def generate_response(prompt):
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "system", "content": "You are a travel planner for Puerto Rico."},
                   {"role": "user", "content": prompt}]
     )
-    return response["choices"][0]["message"]["content"]
+    return response.choices[0].message.content
 
 # Generate Itinerary using OpenAI
 def generate_itinerary(visit_list, travel_date):

@@ -3,6 +3,7 @@ import os
 import openai
 import requests
 import json
+import re
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.chat_models import ChatOpenAI
@@ -21,7 +22,7 @@ LLM_MODEL = "gpt-3.5-turbo"
 EMBEDDING_MODEL = "text-embedding-ada-002"
 
 # Directorio de datos
-DATA_DIR = "data/landmarks"
+DATA_DIR = "data/landmark"
 
 # Función para dividir texto en fragmentos pequeños
 def chunk_text(text, chunk_size=500):
@@ -93,8 +94,27 @@ def get_weather(location):
     url = f"http://api.weatherapi.com/v1/forecast.json?key={WEATHER_API_KEY}&q={location}&days=3"
     response = requests.get(url)
     if response.status_code == 200:
-        return response.json()
+        weather = response.json()
+        forecast = weather.get("forecast", {}).get("forecastday", [])[0]
+        if forecast:
+            return {
+                "location": weather.get("location", {}).get("name", "Unknown"),
+                "temperature": forecast.get("day", {}).get("avgtemp_c", "N/A"),
+                "condition": forecast.get("day", {}).get("condition", {}).get("text", "N/A"),
+                "humidity": forecast.get("day", {}).get("avghumidity", "N/A"),
+                "wind": forecast.get("day", {}).get("maxwind_kph", "N/A")
+            }
     return {"error": "Could not fetch weather data."}
+
+# Extraer la primera ubicación válida
+def extract_valid_location(itinerary_text):
+    puerto_rico_places = ["San Juan", "Ponce", "Mayagüez", "Arecibo", "Caguas", "Fajardo", "Rincón", "Vieques", "Culebra", "Isabela", "Guayama", "Yauco", "Humacao"]
+    
+    for line in itinerary_text.split("\n"):
+        for place in puerto_rico_places:
+            if place.lower() in line.lower():
+                return place
+    return "San Juan"  # Fallback si no encuentra un lugar válido
 
 # Interfaz con Streamlit
 st.title("Puerto Rico Travel Planner")
@@ -113,7 +133,7 @@ if st.button("Get Itinerary"):
 
         # Clima para el primer destino del itinerario
         st.write("### Weather Forecast:")
-        first_location = itinerary["result"].split("\n")[0] if itinerary["result"] else "San Juan"
+        first_location = extract_valid_location(itinerary["result"])
         weather_data = get_weather(first_location)
         st.json(weather_data)
     else:

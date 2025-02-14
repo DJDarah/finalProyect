@@ -51,7 +51,7 @@ selected_interests = st.multiselect("Select your interests", categories)
 
 # Location Suggestions
 if st.button("Suggest Locations"):
-    suggested_locations = list(landmarks_data.keys())[:10]
+    suggested_locations = [item.get("row", {}).get("Name", "Unknown") for item in landmarks_data.values()][:10]
     st.write("### Suggested Locations:")
     for loc in suggested_locations:
         st.write(f"- {loc}")
@@ -70,3 +70,4 @@ if st.button("Lock Locations"):
             visit_list.append(loc)
     st.write("### Your Locked Visit List:")
     st.write(visit_list)
+

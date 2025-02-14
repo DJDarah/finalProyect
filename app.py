@@ -66,15 +66,19 @@ def find_weather_forecast(date, location):
             return forecast.get('day', {}).get('condition', {}).get('text', 'Unknown')
     return "Weather data not available"
 
-# Generate Itinerary using OpenAI
-def generate_itinerary(visit_list, travel_date):
-    prompt = f"Generate a travel itinerary for the following locations in Puerto Rico on {travel_date}: {', '.join(visit_list)}. Include recommendations for food, activities, and travel tips."
+# Generate Responses using OpenAI
+def generate_response(prompt):
     response = openai.ChatCompletion.create(
         model="gpt-4",
         messages=[{"role": "system", "content": "You are a travel planner for Puerto Rico."},
                   {"role": "user", "content": prompt}]
     )
     return response["choices"][0]["message"]["content"]
+
+# Generate Itinerary using OpenAI
+def generate_itinerary(visit_list, travel_date):
+    prompt = f"Generate a travel itinerary for the following locations in Puerto Rico on {travel_date}: {', '.join(visit_list)}. Include recommendations for food, activities, and travel tips."
+    return generate_response(prompt)
 
 # Streamlit UI
 st.title("🌍 Puerto Rico Travel Planner")
@@ -96,8 +100,10 @@ if st.button("Suggest Locations"):
 # Ask About Locations
 location_query = st.text_input("Ask about a specific location")
 if st.button("Get Information") and location_query:
-    info = get_location_data(location_query)
-    st.json(info)
+    prompt = f"Provide information about {location_query} in Puerto Rico."
+    info = generate_response(prompt)
+    st.write("### AI Response:")
+    st.write(info)
 
 # Visit List
 visit_list = []

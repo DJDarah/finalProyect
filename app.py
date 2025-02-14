@@ -30,16 +30,17 @@ def categorize_locations(data):
         category = item.get('row', {}).get('Category', 'Other')
         name = item.get('row', {}).get('Name', 'Unknown')
         municipality = item.get('row', {}).get('Municipality', 'Unknown')
+        
         if "beach" in category.lower():
-            categories["Beaches"].append(f"{name} ({municipality})")
+            categories["Beaches"].append({"name": name, "municipality": municipality})
         elif "nature" in category.lower():
-            categories["Nature"].append(f"{name} ({municipality})")
+            categories["Nature"].append({"name": name, "municipality": municipality})
         elif "historical" in category.lower():
-            categories["Historical Sites"].append(f"{name} ({municipality})")
+            categories["Historical Sites"].append({"name": name, "municipality": municipality})
         elif "food" in category.lower():
-            categories["Food & Culture"].append(f"{name} ({municipality})")
+            categories["Food & Culture"].append({"name": name, "municipality": municipality})
         elif "festival" in category.lower():
-            categories["Festivals & Events"].append(f"{name} ({municipality})")
+            categories["Festivals & Events"].append({"name": name, "municipality": municipality})
     return categories
 
 location_categories = categorize_locations(landmarks_data)
@@ -54,6 +55,34 @@ def find_weather_forecast(date, location):
         if forecast:
             return forecast.get('day', {}).get('condition', {}).get('text', 'Unknown')
     return "Weather data not available"
+
+# Obtener información de ubicación
+def get_location_data(location_name):
+    url = f"https://en.wikipedia.org/wiki/{location_name.replace(' ', '_')}"
+    response = requests.get(url)
+    
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.text, 'html.parser')
+        summary = "Summary not available."
+        paragraphs = soup.find_all('p')
+        for p in paragraphs:
+            if "may refer to" not in p.text and len(p.text.strip()) > 30:
+                summary = p.text.strip()
+                break
+
+        coordinates = "Coordinates unavailable"
+        infobox = soup.find(class_="infobox")
+        if infobox:
+            for row in infobox.find_all("tr"):
+                if "Coordinates" in row.text:
+                    coord_tag = row.find("span", class_="geo-dec")
+                    if coord_tag:
+                        coordinates = coord_tag.text.strip()
+                    break
+        
+        return {"location": location_name, "coordinates": coordinates, "summary": summary}
+    
+    return {"error": "Location not found"}
 
 # Generar respuestas con OpenAI
 def generate_response(prompt):
@@ -85,15 +114,15 @@ if st.button("Suggest Locations"):
         suggested_locations.extend(location_categories.get(interest, []))
     st.write("### Suggested Locations:")
     for loc in suggested_locations:
-        st.write(f"- {loc}")
+        st.write(f"- {loc['name']} ({loc['municipality']})")
 
 # Consultar información de una ubicación
 location_query = st.text_input("Ask about a specific location")
 if st.button("Get Information") and location_query:
-    info = generate_response(f"Provide detailed travel information about {location_query} in Puerto Rico.")
+    info = get_location_data(location_query)
     weather = find_weather_forecast(date_selected, location_query)
     st.write("### Location Information:")
-    st.write(info)
+    st.json(info)
     st.write("### Weather Forecast:")
     st.write(weather)
 
@@ -101,8 +130,8 @@ if st.button("Get Information") and location_query:
 visit_list = []
 if st.button("Lock Locations"):
     for loc in suggested_locations:
-        if st.checkbox(f"Lock {loc}"):
-            visit_list.append(loc)
+        if st.checkbox(f"Lock {loc['name']} ({loc['municipality']})"):
+            visit_list.append(loc['name'])
     st.write("### Your Locked Visit List:")
     st.write(visit_list)
 

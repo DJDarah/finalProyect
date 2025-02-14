@@ -24,22 +24,35 @@ municipalities_path = "municipalities_embeddings.json"
 landmarks_data = load_json(landmarks_path)
 municipalities_data = load_json(municipalities_path)
 
-# Wikipedia Data Extraction
+# Wikipedia Data Extraction (Improved)
 def get_location_data(location_name):
     url = f"https://en.wikipedia.org/wiki/{location_name.replace(' ', '_')}"
     response = requests.get(url)
     
     if response.status_code == 200:
         soup = BeautifulSoup(response.text, 'html.parser')
-        paragraphs = soup.find_all('p')
+        
+        # Get first valid summary paragraph (avoiding disambiguation)
         summary = "Summary not available."
+        paragraphs = soup.find_all('p')
         for p in paragraphs:
             if "may refer to" not in p.text and len(p.text.strip()) > 30:
                 summary = p.text.strip()
                 break
-        coords = soup.find(class_='geo-dec')
-        coordinates = coords.text.strip() if coords else "Coordinates unavailable"
+
+        # Get coordinates from Wikipedia infobox (more reliable than geo-dec class)
+        coordinates = "Coordinates unavailable"
+        infobox = soup.find(class_="infobox")
+        if infobox:
+            for row in infobox.find_all("tr"):
+                if "Coordinates" in row.text:
+                    coord_tag = row.find("span", class_="geo-dec")
+                    if coord_tag:
+                        coordinates = coord_tag.text.strip()
+                    break
+        
         return {"location": location_name, "coordinates": coordinates, "summary": summary}
+    
     return {"error": "Location not found"}
 
 # Weather API

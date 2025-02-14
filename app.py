@@ -7,12 +7,12 @@ import os
 from dotenv import load_dotenv, find_dotenv
 from datetime import datetime
 
-# 📌 Cargar claves API desde GitHub Secrets o entorno local
-load_dotenv(find_dotenv())  # Carga las claves desde .env si existe
+# 📌 Load API keys from environment variables
+load_dotenv(find_dotenv())  # Load from .env if available
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 
-# Inicializar cliente OpenAI
+# Initialize OpenAI client
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 # Load Data
@@ -26,15 +26,34 @@ municipalities_path = "municipalities_embeddings.json"
 landmarks_data = load_json(landmarks_path)
 municipalities_data = load_json(municipalities_path)
 
-# Wikipedia Data Extraction (Improved)
+# Categorize Locations by Type
+def categorize_locations(data):
+    categories = {"Beaches": [], "Nature": [], "Historical Sites": [], "Food & Culture": [], "Festivals & Events": []}
+    for item in data.values():
+        category = item.get('row', {}).get('Category', 'Other')
+        name = item.get('row', {}).get('Name', 'Unknown')
+        municipality = item.get('row', {}).get('Municipality', 'Unknown')
+        if "beach" in category.lower():
+            categories["Beaches"].append(f"{name} ({municipality})")
+        elif "nature" in category.lower():
+            categories["Nature"].append(f"{name} ({municipality})")
+        elif "historical" in category.lower():
+            categories["Historical Sites"].append(f"{name} ({municipality})")
+        elif "food" in category.lower():
+            categories["Food & Culture"].append(f"{name} ({municipality})")
+        elif "festival" in category.lower():
+            categories["Festivals & Events"].append(f"{name} ({municipality})")
+    return categories
+
+location_categories = categorize_locations(landmarks_data)
+
+# Wikipedia Data Extraction
 def get_location_data(location_name):
     url = f"https://en.wikipedia.org/wiki/{location_name.replace(' ', '_')}"
     response = requests.get(url)
     
     if response.status_code == 200:
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Get first valid summary paragraph (avoiding disambiguation)
         summary = "Summary not available."
         paragraphs = soup.find_all('p')
         for p in paragraphs:
@@ -42,7 +61,6 @@ def get_location_data(location_name):
                 summary = p.text.strip()
                 break
 
-        # Get coordinates from Wikipedia infobox (more reliable than geo-dec class)
         coordinates = "Coordinates unavailable"
         infobox = soup.find(class_="infobox")
         if infobox:
@@ -89,12 +107,13 @@ st.title("🌍 Puerto Rico Travel Planner")
 travel_date = st.date_input("Select your travel date", datetime.today())
 
 # Interest Selection
-categories = ["Beaches", "Nature", "Historical Sites", "Food & Culture", "Festivals & Events"]
-selected_interests = st.multiselect("Select your interests", categories)
+selected_interests = st.multiselect("Select your interests", list(location_categories.keys()))
 
 # Location Suggestions
 if st.button("Suggest Locations"):
-    suggested_locations = [item.get("row", {}).get("Name", "Unknown") for item in landmarks_data.values()][:10]
+    suggested_locations = []
+    for interest in selected_interests:
+        suggested_locations.extend(location_categories.get(interest, []))
     st.write("### Suggested Locations:")
     for loc in suggested_locations:
         st.write(f"- {loc}")
@@ -102,10 +121,9 @@ if st.button("Suggest Locations"):
 # Ask About Locations
 location_query = st.text_input("Ask about a specific location")
 if st.button("Get Information") and location_query:
-    prompt = f"Provide information about {location_query} in Puerto Rico."
-    info = generate_response(prompt)
-    st.write("### AI Response:")
-    st.write(info)
+    info = get_location_data(location_query)
+    st.write("### Location Information:")
+    st.json(info)
 
 # Visit List
 visit_list = []

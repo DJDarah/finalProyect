@@ -18,7 +18,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 
 # Definir modelo optimizado
-LLM_MODEL = "gpt-3.5-turbo"
+LLM_MODEL = "gpt-4"
 EMBEDDING_MODEL = "text-embedding-ada-002"
 
 # Directorio de datos

@@ -3,9 +3,8 @@ openai
 requests
 beautifulsoup4
 langchain
-langchain_openai
-langchain_community
+langchain-openai
+langchain-community
 bs4
 faiss-cpu
-json
-datetime
+python-dotenv
